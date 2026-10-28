@@ -16,7 +16,7 @@ sudo dpkg -i cliamprustdesktop_*_amd64.deb
 sudo apt-get install -f
 ```
 
-The `.deb` installs **Cliamp Desktop** and **cliamp** (`/usr/bin`) — no separate cliamp install step.
+The `.deb` installs **Cliamp Desktop** and **cliamp** (`/usr/bin`) — no separate cliamp install step. Supports **Ubuntu 22.04+** (amd64).
 
 ### Build from source
 

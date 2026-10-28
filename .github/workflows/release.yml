@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
@@ -85,7 +85,7 @@ jobs:
 
             This package includes **cliamp** and **cliamprustdesktop** — no separate cliamp install required.
 
-            **ffmpeg** is recommended for AAC, Opus, and HLS (`sudo apt install ffmpeg`).
+            **Supported:** Ubuntu 22.04+ (amd64). **ffmpeg** is recommended for AAC, Opus, and HLS (`sudo apt install ffmpeg`).
 
             ## Tarball
 
