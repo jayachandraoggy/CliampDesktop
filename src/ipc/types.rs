@@ -172,3 +172,40 @@ impl ProviderPlaylist {
             .unwrap_or_else(|| self.id.clone().unwrap_or_else(|| "—".to_string()))
     }
 }
+
+pub fn tracks_from_job(job: &JobRecord, playlist: &str) -> (u32, Vec<ProviderPlaylist>) {
+    let mut out = Vec::new();
+    let mut total = 0u32;
+    if let Some(result) = &job.result {
+        total = result
+            .get("total")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
+        if let Some(items) = result.get("tracks").and_then(|v| v.as_array()) {
+            for (index, item) in items.iter().enumerate() {
+                let title = item
+                    .get("title")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Station");
+                let path = item.get("path").and_then(|v| v.as_str());
+                let _ = path;
+                let track_index = item
+                    .get("index")
+                    .and_then(|v| v.as_u64())
+                    .map(|n| n as u32)
+                    .unwrap_or(index as u32);
+                out.push(ProviderPlaylist {
+                    id: Some(format!("channel:{playlist}:{track_index}")),
+                    name: Some(title.to_string()),
+                    title: None,
+                    section: item
+                        .get("genre")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_string),
+                    extra: item.clone(),
+                });
+            }
+        }
+    }
+    (total, out)
+}
