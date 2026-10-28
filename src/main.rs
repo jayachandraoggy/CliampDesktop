@@ -12,15 +12,21 @@ fn main() -> eframe::Result<()> {
         )
         .init();
 
+    let icon = eframe::icon_data::from_png_bytes(include_bytes!(
+        "../assets/icons/hicolor/64x64/apps/hertz.png"
+    ))
+    .expect("valid app icon PNG");
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([960.0, 640.0])
-            .with_title("Cliamp Desktop"),
+            .with_title("Hertz")
+            .with_icon(icon),
         ..Default::default()
     };
 
     eframe::run_native(
-        "Cliamp Desktop",
+        "Hertz",
         options,
         Box::new(|cc| Ok(Box::new(app::CliampApp::new(cc)))),
     )

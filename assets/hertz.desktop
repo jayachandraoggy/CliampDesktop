@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Hertz
+Comment=Radio streaming — Cliamp Radio and Radio Browser
+Exec=hertz
+Icon=hertz
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;

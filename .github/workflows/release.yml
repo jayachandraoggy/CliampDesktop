@@ -50,7 +50,7 @@ jobs:
 
       - name: Strip binaries
         run: |
-          strip target/release/cliamprustdesktop
+          strip target/release/hertz
           strip packaging/cliamp
 
       - name: Build deb package
@@ -60,15 +60,15 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME}"
           VERSION="${TAG#v}"
-          TAR="cliamprustdesktop-${TAG}-x86_64-unknown-linux-gnu.tar.gz"
+          TAR="hertz-${TAG}-x86_64-unknown-linux-gnu.tar.gz"
           mkdir -p dist
-          cp target/release/cliamprustdesktop packaging/cliamp assets/README-INSTALL.txt dist/
-          tar -czf "$TAR" -C dist cliamprustdesktop cliamp README-INSTALL.txt
+          cp target/release/hertz packaging/cliamp assets/README-INSTALL.txt dist/
+          tar -czf "$TAR" -C dist hertz cliamp README-INSTALL.txt
           sha256sum "$TAR" > "${TAR}.sha256"
 
       - name: Checksum deb package
         run: |
-          DEB=$(ls target/debian/cliamprustdesktop_*_amd64.deb)
+          DEB=$(ls target/debian/hertz_*_amd64.deb)
           sha256sum "$DEB" > "${DEB}.sha256"
 
       - name: Publish GitHub Release
@@ -79,11 +79,11 @@ jobs:
             ## Install (recommended)
 
             ```bash
-            sudo dpkg -i cliamprustdesktop_*_amd64.deb
+            sudo dpkg -i hertz_*_amd64.deb
             sudo apt-get install -f
             ```
 
-            This package includes **cliamp** and **cliamprustdesktop** — no separate cliamp install required.
+            This package includes **cliamp** and **hertz** — no separate cliamp install required.
 
             **Supported:** Ubuntu 22.04+ (amd64). **ffmpeg** is recommended for AAC, Opus, and HLS (`sudo apt install ffmpeg`).
 
@@ -91,7 +91,7 @@ jobs:
 
             Extract and copy both binaries to a directory on your `PATH`, or use the `.deb` above.
           files: |
-            cliamprustdesktop-*-x86_64-unknown-linux-gnu.tar.gz
-            cliamprustdesktop-*-x86_64-unknown-linux-gnu.tar.gz.sha256
-            target/debian/cliamprustdesktop_*_amd64.deb
-            target/debian/cliamprustdesktop_*_amd64.deb.sha256
+            hertz-*-x86_64-unknown-linux-gnu.tar.gz
+            hertz-*-x86_64-unknown-linux-gnu.tar.gz.sha256
+            target/debian/hertz_*_amd64.deb
+            target/debian/hertz_*_amd64.deb.sha256

@@ -642,22 +642,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cliamprustdesktop"
-version = "0.1.1"
-dependencies = [
- "anyhow",
- "directories",
- "eframe",
- "egui",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "clipboard-win"
 version = "5.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1477,6 +1461,22 @@ name = "hermit-abi"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e17592d60ebacc7d5e169f4663c5f84f9161cc90328abcfe8456f41e4dfcb284"
+
+[[package]]
+name = "hertz"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "directories",
+ "eframe",
+ "egui",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
 
 [[package]]
 name = "hex"

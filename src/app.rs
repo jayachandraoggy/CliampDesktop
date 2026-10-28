@@ -432,7 +432,7 @@ impl eframe::App for CliampApp {
 
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.heading("Cliamp Desktop");
+                ui.heading("Hertz");
                 ui.separator();
                 if ui.selectable_label(self.tab == AppTab::CliampRadio, "Cliamp Radio").clicked() {
                     self.tab = AppTab::CliampRadio;

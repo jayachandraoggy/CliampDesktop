@@ -1,8 +1,8 @@
 [package]
-name = "cliamprustdesktop"
-version = "0.1.1"
+name = "hertz"
+version = "0.2.0"
 edition = "2021"
-description = "Desktop GUI for cliamp — Cliamp Radio and Radio Browser"
+description = "Hertz — desktop radio streaming (Cliamp Radio and Radio Browser)"
 license = "MIT"
 
 [package.metadata.deb]
@@ -13,16 +13,26 @@ section = "sound"
 priority = "optional"
 depends = "libasound2, $auto"
 recommends = "ffmpeg"
+replaces = "cliamprustdesktop"
 extended-description = """\
-Desktop GUI for cliamp — Cliamp Radio and Radio Browser on Linux.
-This package installs the cliamprustdesktop application and bundles the \
-cliamp playback engine in /usr/bin. Requires Ubuntu 22.04 or compatible \
-(libc6 >= 2.35). ffmpeg is recommended for some codecs."""
+Hertz is a desktop GUI for listening to internet radio via cliamp — \
+Cliamp Radio and Radio Browser on Linux.
+This package installs the hertz application and bundles the cliamp playback \
+engine in /usr/bin. Requires Ubuntu 22.04 or compatible (libc6 >= 2.35). \
+ffmpeg is recommended for some codecs."""
 assets = [
-    ["target/release/cliamprustdesktop", "usr/bin/", "755"],
+    ["target/release/hertz", "usr/bin/", "755"],
     ["packaging/cliamp", "usr/bin/cliamp", "755"],
-    ["assets/cliamprustdesktop.desktop", "usr/share/applications/", "644"],
-    ["assets/copyright", "usr/share/doc/cliamprustdesktop/copyright", "644"],
+    ["assets/hertz.desktop", "usr/share/applications/", "644"],
+    ["assets/copyright", "usr/share/doc/hertz/copyright", "644"],
+    ["assets/icons/hicolor/16x16/apps/hertz.png", "usr/share/icons/hicolor/16x16/apps/", "644"],
+    ["assets/icons/hicolor/24x24/apps/hertz.png", "usr/share/icons/hicolor/24x24/apps/", "644"],
+    ["assets/icons/hicolor/32x32/apps/hertz.png", "usr/share/icons/hicolor/32x32/apps/", "644"],
+    ["assets/icons/hicolor/48x48/apps/hertz.png", "usr/share/icons/hicolor/48x48/apps/", "644"],
+    ["assets/icons/hicolor/64x64/apps/hertz.png", "usr/share/icons/hicolor/64x64/apps/", "644"],
+    ["assets/icons/hicolor/128x128/apps/hertz.png", "usr/share/icons/hicolor/128x128/apps/", "644"],
+    ["assets/icons/hicolor/256x256/apps/hertz.png", "usr/share/icons/hicolor/256x256/apps/", "644"],
+    ["assets/icons/hicolor/512x512/apps/hertz.png", "usr/share/icons/hicolor/512x512/apps/", "644"],
 ]
 
 [dependencies]

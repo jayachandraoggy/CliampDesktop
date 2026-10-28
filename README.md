@@ -1,4 +1,4 @@
-# Cliamp Rust Desktop
+# Hertz
 
 A Rust desktop GUI for [cliamp](https://www.cliamp.stream/) that uses **cliamp** as the playback engine (headless daemon + IPC V2) and surfaces:
 
@@ -9,14 +9,14 @@ A Rust desktop GUI for [cliamp](https://www.cliamp.stream/) that uses **cliamp**
 
 ### Install from release (recommended)
 
-Download `cliamprustdesktop_<version>_amd64.deb` from [GitHub Releases](https://github.com/jayachandraoggy/CliampDesktop/releases):
+Download `hertz_<version>_amd64.deb` from [GitHub Releases](https://github.com/jayachandraoggy/CliampDesktop/releases):
 
 ```sh
-sudo dpkg -i cliamprustdesktop_*_amd64.deb
+sudo dpkg -i hertz_*_amd64.deb
 sudo apt-get install -f
 ```
 
-The `.deb` installs **Cliamp Desktop** and **cliamp** (`/usr/bin`) — no separate cliamp install step. Supports **Ubuntu 22.04+** (amd64).
+The `.deb` installs **Hertz** and **cliamp** (`/usr/bin`) — no separate cliamp install step. Supports **Ubuntu 22.04+** (amd64).
 
 ### Build from source
 
@@ -25,6 +25,16 @@ The `.deb` installs **Cliamp Desktop** and **cliamp** (`/usr/bin`) — no separa
   Or run `./scripts/fetch-cliamp.sh` and put `packaging/cliamp` on your `PATH` as `cliamp`.
 - **[ffmpeg](https://ffmpeg.org/)** (recommended for AAC, Opus, HLS)
 - Linux (Unix socket IPC at `~/.config/cliamp/cliamp.sock`)
+
+## Icons
+
+Launcher icons are generated from `assets/icons/hertz.svg`:
+
+```sh
+./scripts/generate-icons.sh
+```
+
+Requires `rsvg-convert` or Python `cairosvg` (`pip install cairosvg`).
 
 ## Releases
 
