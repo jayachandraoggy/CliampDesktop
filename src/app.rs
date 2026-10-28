@@ -8,12 +8,13 @@ use crate::cliamp::spawn::{cliamp_binary, ConnectionPhase, DaemonChild};
 use crate::ipc::client::IpcClient;
 use crate::ipc::subscribe::spawn_subscribe_thread;
 use crate::ipc::types::SubscribeMessage;
-use crate::ipc::types::{playlists_from_job, ProviderPlaylist, Snapshot};
+use crate::ipc::types::{playlists_from_job, tracks_from_job, ProviderPlaylist, Snapshot};
 use crate::radio_api::channels::Channel;
 use crate::radio_api::statistics::Statistics;
 use crate::ui::{cliamp_radio, now_playing, radio_browser, status, transport};
 
 pub const PROVIDER_RADIO: &str = "radio";
+const RADIO_TRACKS_PAGE: u32 = 50;
 
 #[derive(Debug)]
 enum WorkRequest {
@@ -21,7 +22,17 @@ enum WorkRequest {
     SetVolume(f64),
     UrlLoad { path: String, play: bool },
     ProviderPlaylists,
-    ProviderCatalog { offset: u32, limit: u32 },
+    ProviderCatalog {
+        playlist: Option<String>,
+        offset: u32,
+        limit: u32,
+    },
+    ProviderTracks {
+        playlist: String,
+        offset: u32,
+        limit: u32,
+        append: bool,
+    },
     ProviderSearch { query: String, offset: u32, limit: u32 },
     ProviderLoad { playlist: String },
     StatePoll,
@@ -31,6 +42,12 @@ enum WorkRequest {
 enum WorkResponse {
     Ok,
     Playlists(Vec<ProviderPlaylist>),
+    ChannelTracks {
+        playlist: String,
+        append: bool,
+        total: u32,
+        tracks: Vec<ProviderPlaylist>,
+    },
     Error(String),
     Snapshot(Snapshot),
 }
@@ -58,10 +75,19 @@ pub struct CliampApp {
     pending_play_channel: Option<String>,
     pending_reload_radio_home: bool,
     pending_run_search: bool,
-    pending_play_playlist_id: Option<String>,
-    pending_open_catalog: bool,
+    pending_open_catalog_id: Option<String>,
+    pending_load_channel_source: Option<String>,
+    pending_load_more_channels: bool,
+    pending_play_channel_url: Option<String>,
+    radio_channel_tracks: Vec<ProviderPlaylist>,
+    radio_channel_source: Option<String>,
+    radio_channel_source_name: String,
+    radio_channel_total: u32,
+    radio_channels_loading: bool,
     volume_debounce: Option<f64>,
     last_state_poll: Instant,
+    selected_list_id: Option<String>,
+    selected_channel_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,10 +130,19 @@ impl CliampApp {
             pending_reload_radio_home: false,
             pending_run_search: false,
             pending_play_channel: None,
-            pending_play_playlist_id: None,
-            pending_open_catalog: false,
+            pending_open_catalog_id: None,
+            pending_load_channel_source: None,
+            pending_load_more_channels: false,
+            pending_play_channel_url: None,
+            radio_channel_tracks: Vec::new(),
+            radio_channel_source: None,
+            radio_channel_source_name: String::new(),
+            radio_channel_total: 0,
+            radio_channels_loading: false,
             volume_debounce: None,
             last_state_poll: Instant::now(),
+            selected_list_id: None,
+            selected_channel_id: None,
         };
         app.begin_connect();
         app
@@ -185,17 +220,26 @@ impl CliampApp {
             self.fetch_metadata();
         }
         if let Some(id) = self.pending_play_channel.take() {
+            self.selected_list_id = Some(format!("cliamp:{id}"));
             self.play_channel(&id);
         }
         if self.pending_reload_radio_home {
             self.pending_reload_radio_home = false;
-            self.queue_provider_catalog(0, 50);
+            self.radio_channel_tracks.clear();
+            self.radio_channel_source = None;
+            self.radio_channel_source_name.clear();
+            self.selected_channel_id = None;
+            self.queue_provider_catalog(None, 0, 50);
         }
         if self.pending_run_search {
             self.pending_run_search = false;
             let q = self.search_query.trim().to_string();
             if !q.is_empty() {
                 self.radio_loading = true;
+                self.radio_channel_tracks.clear();
+                self.radio_channel_source = None;
+                self.radio_channel_source_name.clear();
+                self.selected_channel_id = None;
                 self.ipc_busy = true;
                 let _ = self.work_tx.send(WorkRequest::ProviderSearch {
                     query: q,
@@ -204,20 +248,25 @@ impl CliampApp {
                 });
             }
         }
-        if let Some(pl) = self.pending_play_playlist_id.take() {
-            self.ipc_busy = true;
-            if let Some(path) = pl.strip_prefix("search:") {
-                let _ = self.work_tx.send(WorkRequest::UrlLoad {
-                    path: path.to_string(),
-                    play: true,
-                });
-            } else {
-                let _ = self.work_tx.send(WorkRequest::ProviderLoad { playlist: pl });
+        if let Some(id) = self.pending_open_catalog_id.take() {
+            self.queue_provider_catalog(Some(id), 0, 50);
+        }
+        if let Some(pl) = self.pending_load_channel_source.take() {
+            self.queue_load_channels(&pl);
+        }
+        if self.pending_load_more_channels {
+            self.pending_load_more_channels = false;
+            if let Some(pl) = self.radio_channel_source.clone() {
+                let offset = self.radio_channel_tracks.len() as u32;
+                self.queue_provider_tracks(&pl, offset, RADIO_TRACKS_PAGE, true);
             }
         }
-        if self.pending_open_catalog {
-            self.pending_open_catalog = false;
-            self.queue_provider_catalog(0, 50);
+        if let Some(path) = self.pending_play_channel_url.take() {
+            self.ipc_busy = true;
+            let _ = self.work_tx.send(WorkRequest::UrlLoad {
+                path,
+                play: true,
+            });
         }
         if let Some(vol) = self.volume_debounce.take() {
             self.ipc_busy = true;
@@ -225,10 +274,58 @@ impl CliampApp {
         }
     }
 
-    fn queue_provider_catalog(&mut self, offset: u32, limit: u32) {
+    fn queue_provider_catalog(&mut self, playlist: Option<String>, offset: u32, limit: u32) {
         self.radio_loading = true;
         self.ipc_busy = true;
-        let _ = self.work_tx.send(WorkRequest::ProviderCatalog { offset, limit });
+        let _ = self.work_tx.send(WorkRequest::ProviderCatalog {
+            playlist,
+            offset,
+            limit,
+        });
+    }
+
+    fn queue_provider_tracks(&mut self, playlist: &str, offset: u32, limit: u32, append: bool) {
+        self.radio_channels_loading = true;
+        self.ipc_busy = true;
+        if !append {
+            self.radio_channel_tracks.clear();
+            self.radio_channel_source = Some(playlist.to_string());
+            self.radio_channel_total = 0;
+            self.selected_channel_id = None;
+        }
+        let _ = self.work_tx.send(WorkRequest::ProviderTracks {
+            playlist: playlist.to_string(),
+            offset,
+            limit,
+            append,
+        });
+    }
+
+    fn queue_load_channels(&mut self, playlist: &str) {
+        self.radio_channel_source_name = self
+            .radio_playlists
+            .iter()
+            .find(|p| p.id.as_deref() == Some(playlist))
+            .map(|p| p.display_name())
+            .unwrap_or_else(|| playlist.to_string());
+
+        if let Some(path) = playlist.strip_prefix("search:") {
+            let title = self.radio_channel_source_name.clone();
+            self.radio_channel_source = Some(playlist.to_string());
+            self.radio_channel_tracks = vec![ProviderPlaylist {
+                id: Some(format!("channel:{playlist}:0")),
+                name: Some(title),
+                title: None,
+                section: None,
+                extra: serde_json::json!({ "path": path, "stream": true }),
+            }];
+            self.radio_channel_total = 1;
+            self.radio_channels_loading = false;
+            self.selected_channel_id = None;
+            return;
+        }
+
+        self.queue_provider_tracks(playlist, 0, RADIO_TRACKS_PAGE, false);
     }
 
     fn drain_work_responses(&mut self) {
@@ -241,9 +338,25 @@ impl CliampApp {
                     self.radio_playlists = list;
                     self.radio_loading = false;
                 }
+                WorkResponse::ChannelTracks {
+                    playlist,
+                    append,
+                    total,
+                    tracks,
+                } => {
+                    self.radio_channels_loading = false;
+                    self.radio_channel_source = Some(playlist);
+                    self.radio_channel_total = total;
+                    if append {
+                        self.radio_channel_tracks.extend(tracks);
+                    } else {
+                        self.radio_channel_tracks = tracks;
+                    }
+                }
                 WorkResponse::Error(e) => {
                     self.error_message = Some(e);
                     self.radio_loading = false;
+                    self.radio_channels_loading = false;
                 }
             }
         }
@@ -363,68 +476,84 @@ impl eframe::App for CliampApp {
             }
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.set_min_width(280.0);
-                    now_playing::show_now_playing(ui, &self.snapshot);
-                });
-                ui.separator();
-                ui.vertical(|ui| {
-                    if self.connection != ConnectionPhase::Connected {
-                        ui.label("Connect to cliamp to browse and play.");
-                        return;
-                    }
-                    match self.tab {
-                        AppTab::CliampRadio => {
-                            let mut refresh = false;
-                            let mut play = None;
-                            cliamp_radio::show_cliamp_radio(
-                                ui,
-                                &self.channels,
-                                &self.stats,
-                                self.channels_loading,
-                                &mut refresh,
-                                &mut play,
-                            );
-                            if refresh {
-                                self.pending_refresh_channels = true;
-                            }
-                            if let Some(id) = play {
-                                self.pending_play_channel = Some(id);
-                            }
-                        }
-                        AppTab::RadioBrowser => {
-                            let mut reload = false;
-                            let mut search = false;
-                            let mut play_id = None;
-                            let mut open_cat = None;
-                            radio_browser::show_radio_browser(
-                                ui,
-                                &mut self.search_query,
-                                &self.radio_playlists,
-                                self.radio_loading,
-                                &mut reload,
-                                &mut search,
-                                &mut play_id,
-                                &mut open_cat,
-                            );
-                            if reload {
-                                self.pending_reload_radio_home = true;
-                            }
-                            if search {
-                                self.pending_run_search = true;
-                            }
-                            if let Some(id) = play_id {
-                                self.pending_play_playlist_id = Some(id);
-                            }
-                            if open_cat.is_some() {
-                                self.pending_open_catalog = true;
-                            }
-                        }
-                    }
-                });
+        egui::SidePanel::left("now_playing_panel")
+            .resizable(true)
+            .default_width(300.0)
+            .width_range(260.0..=380.0)
+            .show(ctx, |ui| {
+                now_playing::show_now_playing(ui, &self.snapshot);
             });
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            if self.connection != ConnectionPhase::Connected {
+                ui.label("Connect to cliamp to browse and play.");
+                return;
+            }
+            match self.tab {
+                AppTab::CliampRadio => {
+                    let mut refresh = false;
+                    let mut play = None;
+                    cliamp_radio::show_cliamp_radio(
+                        ui,
+                        &self.channels,
+                        &self.stats,
+                        self.channels_loading,
+                        &mut self.selected_list_id,
+                        &mut refresh,
+                        &mut play,
+                    );
+                    if refresh {
+                        self.pending_refresh_channels = true;
+                    }
+                    if let Some(id) = play {
+                        self.pending_play_channel = Some(id);
+                    }
+                }
+                AppTab::RadioBrowser => {
+                    let mut reload = false;
+                    let mut search = false;
+                    let mut load_channels = None;
+                    let mut open_cat = None;
+                    let mut load_more = false;
+                    let mut play_url = None;
+                    radio_browser::show_radio_browser(
+                        ui,
+                        &mut self.search_query,
+                        &self.radio_playlists,
+                        self.radio_loading,
+                        &self.radio_channel_tracks,
+                        &self.radio_channel_source_name,
+                        self.radio_channel_total,
+                        self.radio_channels_loading,
+                        &mut self.selected_list_id,
+                        &mut self.selected_channel_id,
+                        &mut reload,
+                        &mut search,
+                        &mut load_channels,
+                        &mut open_cat,
+                        &mut load_more,
+                        &mut play_url,
+                    );
+                    if reload {
+                        self.pending_reload_radio_home = true;
+                    }
+                    if search {
+                        self.pending_run_search = true;
+                    }
+                    if let Some(id) = load_channels {
+                        self.pending_load_channel_source = Some(id);
+                    }
+                    if let Some(id) = open_cat {
+                        self.pending_open_catalog_id = Some(id);
+                    }
+                    if load_more {
+                        self.pending_load_more_channels = true;
+                    }
+                    if let Some(url) = play_url {
+                        self.pending_play_channel_url = Some(url);
+                    }
+                }
+            }
         });
 
         ctx.request_repaint_after(Duration::from_millis(250));
@@ -464,8 +593,24 @@ fn handle_work(req: WorkRequest) -> WorkResponse {
             Ok(list) => WorkResponse::Playlists(list),
             Err(e) => WorkResponse::Error(e.to_string()),
         },
-        WorkRequest::ProviderCatalog { offset, limit } => match run_provider_catalog(offset, limit) {
-            Ok(list) => WorkResponse::Playlists(list),
+        WorkRequest::ProviderCatalog { playlist, offset, limit } => {
+            match run_provider_catalog(playlist.as_deref(), offset, limit) {
+                Ok(list) => WorkResponse::Playlists(list),
+                Err(e) => WorkResponse::Error(e.to_string()),
+            }
+        }
+        WorkRequest::ProviderTracks {
+            playlist,
+            offset,
+            limit,
+            append,
+        } => match run_provider_tracks(&playlist, offset, limit) {
+            Ok((total, tracks)) => WorkResponse::ChannelTracks {
+                playlist,
+                append,
+                total,
+                tracks,
+            },
             Err(e) => WorkResponse::Error(e.to_string()),
         },
         WorkRequest::ProviderSearch { query, offset, limit } => {
@@ -537,15 +682,39 @@ fn run_provider_playlists() -> Result<Vec<ProviderPlaylist>, anyhow::Error> {
     })
 }
 
-fn run_provider_catalog(offset: u32, limit: u32) -> Result<Vec<ProviderPlaylist>, anyhow::Error> {
+fn run_provider_catalog(
+    playlist: Option<&str>,
+    offset: u32,
+    limit: u32,
+) -> Result<Vec<ProviderPlaylist>, anyhow::Error> {
     with_client(|c| {
-        let params = serde_json::json!({
+        let mut params = serde_json::json!({
             "provider": PROVIDER_RADIO,
             "offset": offset,
             "limit": limit
         });
+        if let Some(pl) = playlist {
+            params["playlist"] = serde_json::json!(pl);
+        }
         let job = c.submit_and_wait("provider.catalog", params, Duration::from_secs(120))?;
         Ok(playlists_from_job(&job))
+    })
+}
+
+fn run_provider_tracks(
+    playlist: &str,
+    offset: u32,
+    limit: u32,
+) -> Result<(u32, Vec<ProviderPlaylist>), anyhow::Error> {
+    with_client(|c| {
+        let params = serde_json::json!({
+            "provider": PROVIDER_RADIO,
+            "playlist": playlist,
+            "offset": offset,
+            "limit": limit
+        });
+        let job = c.submit_and_wait("provider.tracks", params, Duration::from_secs(120))?;
+        Ok(tracks_from_job(&job, playlist))
     })
 }
 
